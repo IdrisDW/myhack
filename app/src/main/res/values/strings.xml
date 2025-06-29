@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">MyHack</string>
+    <string name="sensor_1">Sensor 1</string>
+    <string name="sensor_2">Sensor 2</string>
+    <string name="sensor_3">Sensor 3</string>
+    <string name="sensor_4">Sensor 4</string>
+    <string name="sensor_5">Sensor 5</string>
+    <string name="sensor_6">Sensor 6</string>
+    <string name="sensor_7">Sensor 7</string>
+    <string name="sensor_8">Sensor 8</string>
+    <string name="sensor_9">Sensor 9</string>
+    <string name="sensor_10">Sensor 10</string>
+    <string name="sensor_11">Sensor 11</string>
+    <string name="sensor_12">Sensor 12</string>
+    <string name="sensor_13">Sensor 13</string>
+    <string name="sensor_14">Sensor 14</string>
+    <string name="sensor_15">Sensor 15</string>
+    <string name="sensor_16">Sensor 16</string>
+    <string name="sensor_17">Sensor 17</string>
+    <string name="sensor_18">Sensor 18</string>
+    <string name="status_normal">Status: Normal</string>
+    <string name="status_abnormal">Abnormal Status !</string>
+</resources>

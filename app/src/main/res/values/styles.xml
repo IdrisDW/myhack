@@ -1,0 +1,14 @@
+<resources>
+    <!-- App theme -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar" />
+
+    <!-- Reusable style for sensor dots -->
+    <style name="SensorDot">
+        <item name="android:layout_width">30dp</item>
+        <item name="android:layout_height">30dp</item>
+        <item name="android:background">@drawable/circle_green</item>
+    </style>
+
+</resources>
+
+
