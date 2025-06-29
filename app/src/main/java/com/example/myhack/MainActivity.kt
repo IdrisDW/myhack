@@ -1,4 +1,4 @@
-package com.example.myhack // Change this if your app uses a different package
+package com.example.myhack
 
 import android.os.Bundle
 import android.os.Handler
@@ -11,9 +11,7 @@ import kotlin.random.Random
 class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
-    private lateinit var sensor1: View
-    private lateinit var sensor2: View
-
+    private val sensorViews = mutableListOf<View>()
     private val handler = Handler(Looper.getMainLooper())
     private val updateInterval = 1000L // 1 second
 
@@ -22,45 +20,49 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         statusText = findViewById(R.id.statusText)
-        sensor1 = findViewById(R.id.sensor1)
-        sensor2 = findViewById(R.id.sensor2)
 
-        startSimulation()
+        // Load sensor Views dynamically
+        for (i in 1..18) {
+            val viewId = resources.getIdentifier("sensor$i", "id", packageName)
+            val sensorView = findViewById<View>(viewId)
+            sensorViews.add(sensorView)
+        }
+
+        startPressureSimulation()
     }
 
-    private fun startSimulation() {
+    private fun startPressureSimulation() {
         handler.postDelayed(object : Runnable {
             override fun run() {
-                simulatePressure()
+                simulateSensorData()
                 handler.postDelayed(this, updateInterval)
             }
         }, updateInterval)
     }
 
-    private fun simulatePressure() {
-        val pressure1 = Random.nextInt(0, 1000)
-        val pressure2 = Random.nextInt(0, 1000)
+    private fun simulateSensorData() {
+        var abnormalDetected = false
 
-        var abnormal = false
-
-        fun updateSensor(view: View, pressure: Int) {
+        for (view in sensorViews) {
+            val pressure = Random.nextInt(0, 1000)
             when {
-                pressure < 200 -> {
-                    view.setBackgroundColor(0xFFFF0000.toInt()) // Red
-                    abnormal = true
+                pressure < 100 -> {
+                    view.setBackgroundResource(R.drawable.circle_red)
+                    abnormalDetected = true
                 }
-                pressure < 600 -> {
-                    view.setBackgroundColor(0xFFFFC107.toInt()) // Yellow
+                pressure < 400 -> {
+                    view.setBackgroundResource(R.drawable.circle_yellow)
                 }
                 else -> {
-                    view.setBackgroundColor(0xFF4CAF50.toInt()) // Green
+                    view.setBackgroundResource(R.drawable.circle_green)
                 }
             }
         }
 
-        updateSensor(sensor1, pressure1)
-        updateSensor(sensor2, pressure2)
-
-        statusText.text = if (abnormal) "⚠️ Abnormal Pressure" else "✅ Status: Normal"
+        statusText.text = if (abnormalDetected) {
+            "⚠️ Abnormal Pressure"
+        } else {
+            "✅ Status: Normal"
+        }
     }
 }
