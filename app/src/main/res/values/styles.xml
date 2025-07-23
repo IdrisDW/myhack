@@ -2,14 +2,26 @@
     <!-- App theme -->
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar" />
 
-    <!-- Reusable style for sensor dots -->
+<!--    &lt;!&ndash; Reusable style for sensor dots &ndash;&gt;-->
+<!--    <style name="SensorDot">-->
+<!--        <item name="android:layout_width">24dp</item>-->
+<!--        <item name="android:layout_height">24dp</item>-->
+<!--        <item name="android:background">@drawable/circle_green</item>-->
+<!--    </style>-->
+
     <style name="SensorDot">
         <item name="android:layout_width">24dp</item>
         <item name="android:layout_height">24dp</item>
         <item name="android:background">@drawable/circle_green</item>
+        <item name="android:layout_margin">4dp</item>
     </style>
 
-
+    <style name="SensorSpacer">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:layout_margin">4dp</item>
+    </style>
 </resources>
 
 
