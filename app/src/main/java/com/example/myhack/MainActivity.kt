@@ -3,41 +3,26 @@ package com.example.myhack
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.View
-import android.widget.GridLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import kotlin.random.Random
+import com.example.myhack.uiApp.FootHeatMapView
+import java.util.Random // <-- Use this for nextGaussian()
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
-    private lateinit var sensorGrid: GridLayout
-    private val sensorViews = mutableListOf<View>()
+    private lateinit var heatmapView: FootHeatMapView
     private val handler = Handler(Looper.getMainLooper())
     private val updateInterval = 1000L // 1 second
+    private val gaussianRandom = Random() // <-- Java Random for nextGaussian()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         statusText = findViewById(R.id.statusText)
-        sensorGrid = findViewById(R.id.sensorGrid)
-
-        // Dynamically create 18 sensor views and add them to the GridLayout
-        for (i in 1..18) {
-            val sensorView = View(this).apply {
-                layoutParams = GridLayout.LayoutParams().apply {
-                    width = 100  // px, adjust to your needs or convert dp to px
-                    height = 100
-                    setMargins(8, 8, 8, 8)
-                }
-                setBackgroundResource(R.drawable.circle_green) // default green color
-                id = View.generateViewId() // unique id just in case
-            }
-            sensorGrid.addView(sensorView)
-            sensorViews.add(sensorView)
-        }
+        heatmapView = findViewById(R.id.heatmapView)
 
         startPressureSimulation()
     }
@@ -52,34 +37,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun simulateSensorData() {
-        var abnormalDetected = false
-
-        for (view in sensorViews) {
-            val pressure = Random.nextInt(0, 1000)
-
-            when {
-                pressure < 100 -> {
-                    view.setBackgroundResource(R.drawable.circle_red)
-                    abnormalDetected = true
-                }
-                pressure < 400 -> {
-                    view.setBackgroundResource(R.drawable.circle_yellow)
-                }
-                else -> {
-                    view.setBackgroundResource(R.drawable.circle_green)
-                }
+        val pressures = IntArray(18) { index ->
+            val (mean, stdDev) = when (index) {
+                in 0..2 -> 800.0 to 50.0   // Heel
+                in 3..13 -> 400.0 to 100.0 // Mid-foot
+                in 14..17 -> 600.0 to 70.0 // Forefoot/toes
+                else -> 300.0 to 100.0
             }
+
+            val value = mean + stdDev * gaussianRandom.nextGaussian()
+            value.coerceIn(0.0, 1000.0).roundToInt()
         }
 
+        heatmapView.updatePressures(pressures)
+
+        val abnormalDetected = pressures.any { it < 100 }
         statusText.text = if (abnormalDetected) {
             "⚠️ Abnormal Pressure"
         } else {
             "✅ Status: Normal"
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        handler.removeCallbacksAndMessages(null)  // Clean up handler callbacks
     }
 }

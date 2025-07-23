@@ -18,26 +18,12 @@
         android:layout_marginTop="16dp"
         android:textStyle="bold" />
 
-    <!-- Optional heatmap view -->
+    <!-- Custom heatmap view -->
     <com.example.myhack.uiApp.FootHeatMapView
-        android:id="@+id/heatmap_view"
+        android:id="@+id/heatmapView"
         android:layout_width="match_parent"
-        android:layout_height="300dp"
+        android:layout_height="600dp"
         android:layout_below="@id/statusText"
-        android:layout_marginTop="12dp" />
-
-    <!-- GridLayout for sensor dots (you may hide this if using only heatmap) -->
-    <GridLayout
-        android:id="@+id/sensorGrid"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/heatmap_view"
-        android:layout_marginTop="12dp"
-        android:columnCount="3"
-        android:rowCount="6"
-        android:alignmentMode="alignMargins"
-        android:padding="8dp">
-        <!-- Add views dynamically from MainActivity.kt -->
-    </GridLayout>
+        android:layout_marginTop="20dp" />
 
 </RelativeLayout>
