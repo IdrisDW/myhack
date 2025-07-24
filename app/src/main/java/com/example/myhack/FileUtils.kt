@@ -13,7 +13,7 @@ fun Context.appendDataToCsv(dataLine: String, fileName: String = "sensor_data.cs
         FileOutputStream(file, true).use { fos ->
             OutputStreamWriter(fos).use { writer ->
                 if (isNewFile) {
-                    writer.append("timestamp," + (1..18).joinToString(",") { "sensor$it" })
+                    writer.append("timestamp," + (1..18).joinToString(",") { "sensor$it" } + ",gait_type")
                     writer.append("\n")
                 }
                 writer.append(dataLine)
