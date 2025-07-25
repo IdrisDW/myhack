@@ -1,82 +1,85 @@
 package com.example.myhack.uiApp
 
-
 import android.content.Context
-import android.graphics.*
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 import com.example.myhack.R
+import kotlin.math.roundToInt
+import android.graphics.Bitmap
+
 
 class FootHeatMapView @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null
-) : View(context, attrs) {
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : View(context, attrs, defStyleAttr) {
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private var sensorValues = List(18) { 0 }
-    private var footBitmap: Bitmap? = null
+    private var pressures: List<Int> = List(18) { 0 }
+    private val maxPressure = 1023f
+    private val paint = Paint()
+    private val footBitmap = BitmapFactory.decodeResource(resources, R.drawable.foot_outline)
 
-    // Map of 18 sensor positions (x, y in normalized 0..1)
-    private val sensorPositions = listOf(
-        // === 7 Paper-Based Functional Sensors ===
-        0.50f to 0.85f, // S1: Heel Center (Large) [Paper: Heel]
-        0.35f to 0.60f, // S2: 1st Metatarsal (Medium) [Paper]
-        0.65f to 0.60f, // S3: 5th Metatarsal (Medium) [Paper]
-        0.40f to 0.25f, // S4: Hallux / Big Toe (Medium) [Paper]
-        0.50f to 0.50f, // S5: 3rd Metatarsal (Small) [Paper]
-        0.45f to 0.65f, // S6: Medial Arch (Small) [Paper]
-        0.55f to 0.65f, // S7: Lateral Arch (Small) [Paper]
-
-        // === 11 Supplemental Sensors ===
-        0.30f to 0.85f, // S8: Heel Left (Large)
-        0.50f to 0.70f, // S9: Midfoot Center (Medium)
-        0.40f to 0.70f, // S10: Midfoot Left (Small)
-        0.60f to 0.70f, // S11: Midfoot Right (Small)
-        0.35f to 0.20f, // S12: Toe 2 (Small)
-        0.45f to 0.20f, // S13: Toe 3 (Small)
-        0.55f to 0.20f, // S14: Toe 4 (Small)
-        0.60f to 0.55f, // S15: Lateral Forefoot (Medium)
-        0.40f to 0.55f, // S16: Medial Forefoot (Medium)
-        0.42f to 0.60f, // S17: Arch Edge Left (Medium)
-        0.58f to 0.60f  // S18: Arch Edge Right (Medium)
-    )
-
-    init {
-        footBitmap = BitmapFactory.decodeResource(resources, R.drawable.foot)
+    fun updatePressures(newPressures: List<Int>) {
+        pressures = newPressures
+        invalidate()
     }
+
+    private val sensorPositions = listOf(
+        Pair(0.22f, 0.85f), // H1 - Medial Heel
+        Pair(0.78f, 0.85f), // H2 - Lateral Heel
+        Pair(0.30f, 0.65f), // M1 - 1st Metatarsal
+        Pair(0.50f, 0.63f), // M3 - 3rd Metatarsal
+        Pair(0.68f, 0.65f), // M5 - 5th Metatarsal
+        Pair(0.35f, 0.30f), // T1 - Big Toe
+        Pair(0.65f, 0.32f), // T5 - 5th Toe
+
+        // Extras
+        Pair(0.50f, 0.80f), // EXTRA1
+        Pair(0.40f, 0.72f), // EXTRA2
+        Pair(0.60f, 0.72f), // EXTRA3
+        Pair(0.25f, 0.55f), // EXTRA4
+        Pair(0.75f, 0.55f), // EXTRA5
+        Pair(0.20f, 0.40f), // EXTRA6
+        Pair(0.80f, 0.40f), // EXTRA7
+        Pair(0.40f, 0.20f), // EXTRA8
+        Pair(0.60f, 0.20f), // EXTRA9
+        Pair(0.50f, 0.10f), // EXTRA10
+        Pair(0.50f, 0.35f)  // EXTRA11
+    )
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Draw foot image centered
-        footBitmap?.let { bmp ->
-            val left = (width - bmp.width) / 2f
-            val top = (height - bmp.height) / 2f
-            canvas.drawBitmap(bmp, left, top, null)
-        }
+        val imageRatio = footBitmap.width.toFloat() / footBitmap.height
+        val displayWidth = width.toFloat()
+        val displayHeight = displayWidth / imageRatio
+        val top = (height - displayHeight) / 2
 
-        val cx = width.toFloat()
-        val cy = height.toFloat()
+        canvas.drawBitmap(
+            Bitmap.createScaledBitmap(footBitmap, displayWidth.toInt(), displayHeight.toInt(), true),
+            0f,
+            top,
+            null
+        )
 
-        for (i in sensorValues.indices) {
-            val (nx, ny) = sensorPositions[i]
-            val x = nx * cx
-            val y = ny * cy
+        pressures.forEachIndexed { index, pressure ->
+            val (xFactor, yFactor) = sensorPositions.getOrNull(index) ?: return@forEachIndexed
+            val x = xFactor * displayWidth
+            val y = top + yFactor * displayHeight
 
-            paint.color = getColorForValue(sensorValues[i])
-            canvas.drawCircle(x, y, 18f, paint)
-        }
-    }
+            val intensity = (pressure / maxPressure).coerceIn(0f, 1f)
+            paint.color = Color.argb(
+                (100 + intensity * 155).roundToInt(),
+                (255 * (1 - intensity)).roundToInt(),
+                0,
+                (255 * intensity).roundToInt()
+            )
 
-    private fun getColorForValue(value: Int): Int {
-        val clamped = value.coerceIn(0, 1023)
-        val ratio = clamped / 1023f
-        return Color.rgb((255 * ratio).toInt(), (255 * (1 - ratio)).toInt(), 0)
-    }
-
-    fun updateSensorValues(newValues: List<Int>) {
-        if (newValues.size == 18) {
-            sensorValues = newValues
-            invalidate()
+            canvas.drawCircle(x, y, 25f, paint)
         }
     }
 }
