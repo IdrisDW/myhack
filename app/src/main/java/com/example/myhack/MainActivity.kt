@@ -7,6 +7,8 @@ import android.util.Log
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.myhack.uiApp.FootHeatMapView
+
+
 import java.util.Random
 import kotlin.math.roundToInt
 
@@ -46,7 +48,8 @@ class MainActivity : AppCompatActivity() {
                     GaitType.DROP_FOOT -> simulateDropFootData()
                 }
 
-                heatmapView.updatePressures(pressures)
+                heatmapView.updateSensorValues(pressures.toList())
+
 
                 val abnormalDetected = pressures.any { it < 100 || it > 900 }
                 statusText.text = when (currentGait) {
