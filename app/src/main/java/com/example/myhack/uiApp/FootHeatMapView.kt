@@ -5,89 +5,104 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.View
 import com.example.myhack.R
-import kotlin.math.min
 
 class FootHeatMapView @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null
+    context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val sensorPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val paint = Paint()
+    private val textPaint = Paint().apply {
         color = Color.BLACK
-        textSize = 28f
+        textSize = 30f
+        textAlign = Paint.Align.CENTER
     }
 
-    private val footOutlineBitmap = BitmapFactory.decodeResource(resources, R.drawable.foot_outline)
-    private val footRect = Rect()
+    private var pressures: List<Float> = List(18) { 0f }
+    private var footBitmap: Bitmap? = null
 
-    // Initialize with 18 dummy values
-    private var pressures: List<Float> = List(18) { 0.0f }
-
-    // Sensor positions: 7 paper-based + 11 extra
+    // Adjusted and labeled sensor positions (0-1 normalized)
     private val sensorPositions = listOf(
-        // --- Paper-based sensors (positions from research article) ---
-        PointF(0.5f, 0.15f), // 1 - Hallux (big toe)
-        PointF(0.7f, 0.2f),  // 2 - Toes 2-5
-        PointF(0.2f, 0.35f), // 3 - 1st metatarsal
-        PointF(0.5f, 0.4f),  // 4 - 3rd metatarsal
-        PointF(0.8f, 0.35f), // 5 - 5th metatarsal
-        PointF(0.4f, 0.7f),  // 6 - Midfoot
-        PointF(0.5f, 0.9f),  // 7 - Heel center
+        PointF(0.48f, 0.13f), // 1 - Hallux
+        PointF(0.62f, 0.20f), // 2 - Toes 2–5 [Adjusted]
+        PointF(0.28f, 0.33f), // 3 - 1st Metatarsal
+        PointF(0.48f, 0.38f), // 4 - 3rd Metatarsal
+        PointF(0.68f, 0.33f), // 5 - 5th Metatarsal
+        PointF(0.44f, 0.68f), // 6 - Midfoot
+        PointF(0.50f, 0.89f), // 7 - Heel center
 
-        // --- Extra sensors for full-foot coverage ---
-        PointF(0.1f, 0.2f),  // 8 - Extra lateral toe
-        PointF(0.9f, 0.2f),  // 9 - Extra medial toe
-        PointF(0.1f, 0.4f),  // 10 - Extra mid lateral met
-        PointF(0.9f, 0.4f),  // 11 - Extra mid medial met
-        PointF(0.3f, 0.55f), // 12 - Extra arch left
-        PointF(0.7f, 0.55f), // 13 - Extra arch right
-        PointF(0.2f, 0.8f),  // 14 - Extra heel left
-        PointF(0.8f, 0.8f),  // 15 - Extra heel right
-        PointF(0.05f, 0.6f), // 16 - Extra outer foot
-        PointF(0.95f, 0.6f), // 17 - Extra inner foot
-        PointF(0.5f, 0.6f)   // 18 - Extra center arch
+        // Extra sensors
+        PointF(0.22f, 0.20f), // 8 - Extra lateral toe
+        PointF(0.72f, 0.22f), // 9 - Extra medial toe [Adjusted]
+        PointF(0.2f, 0.38f),  // 10 - Extra mid lateral met
+        PointF(0.8f, 0.38f),  // 11 - Extra mid medial met
+        PointF(0.36f, 0.53f), // 12 - Extra arch left
+        PointF(0.64f, 0.53f), // 13 - Extra arch right
+        PointF(0.3f, 0.76f),  // 14 - Extra heel left
+        PointF(0.7f, 0.76f),  // 15 - Extra heel right
+        PointF(0.30f, 0.63f), // 16 - Extra outer foot [Adjusted]
+        PointF(0.75f, 0.60f), // 17 - Extra inner foot
+        PointF(0.50f, 0.58f)  // 18 - Extra center arch
     )
+
+    init {
+        footBitmap = BitmapFactory.decodeResource(resources, R.drawable.foot_outline)
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Draw the foot image, scaled to fit
-        val scale = min(width / footOutlineBitmap.width.toFloat(), height / footOutlineBitmap.height.toFloat())
-        val bitmapWidth = (footOutlineBitmap.width * scale).toInt()
-        val bitmapHeight = (footOutlineBitmap.height * scale).toInt()
-        val left = (width - bitmapWidth) / 2
-        val top = (height - bitmapHeight) / 2
-        footRect.set(left, top, left + bitmapWidth, top + bitmapHeight)
-        canvas.drawBitmap(footOutlineBitmap, null, footRect, null)
+        val viewWidth = width.toFloat()
+        val viewHeight = height.toFloat()
 
-        // Draw each sensor
-        for ((index, point) in sensorPositions.withIndex()) {
-            val cx = footRect.left + point.x * footRect.width()
-            val cy = footRect.top + point.y * footRect.height()
-            val pressure = pressures.getOrNull(index) ?: 0f
+        // Draw foot outline bitmap centered
+        footBitmap?.let { bitmap ->
+            val imageRatio = bitmap.width.toFloat() / bitmap.height
+            val viewRatio = viewWidth / viewHeight
+            val drawWidth: Float
+            val drawHeight: Float
+            val left: Float
+            val top: Float
 
-            // Set sensor color based on pressure value
-            sensorPaint.color = getPressureColor(pressure)
+            if (imageRatio > viewRatio) {
+                drawWidth = viewWidth
+                drawHeight = drawWidth / imageRatio
+                left = 0f
+                top = (viewHeight - drawHeight) / 2f
+            } else {
+                drawHeight = viewHeight
+                drawWidth = drawHeight * imageRatio
+                left = (viewWidth - drawWidth) / 2f
+                top = 0f
+            }
 
-            canvas.drawCircle(cx, cy, 18f, sensorPaint)
+            val destRect = RectF(left, top, left + drawWidth, top + drawHeight)
+            canvas.drawBitmap(bitmap, null, destRect, null)
 
-            // Optional: Label each sensor for debugging
-            canvas.drawText("${index + 1}", cx + 15f, cy + 5f, textPaint)
+            // Draw sensors
+            for (i in sensorPositions.indices) {
+                val pos = sensorPositions[i]
+                val x = left + pos.x * drawWidth
+                val y = top + pos.y * drawHeight
+                val pressure = pressures.getOrElse(i) { 0f }
+
+                paint.color = getColorForPressure(pressure)
+                canvas.drawCircle(x, y, 20f, paint)
+
+                // Optional: draw sensor number for debugging
+                canvas.drawText((i + 1).toString(), x, y - 25f, textPaint)
+            }
         }
+    }
+
+    private fun getColorForPressure(pressure: Float): Int {
+        val clamped = pressure.coerceIn(0f, 1f)
+        val red = (clamped * 255).toInt()
+        val green = ((1 - clamped) * 255).toInt()
+        return Color.rgb(red, green, 0)
     }
 
     fun updatePressures(newPressures: List<Float>) {
         pressures = newPressures
         invalidate()
-    }
-
-    private fun getPressureColor(value: Float): Int {
-        // Normalize value between 0 and 1
-        val v = value.coerceIn(0f, 1f)
-
-        val red = (255 * v).toInt()
-        val green = (255 * (1 - v)).toInt()
-        return Color.rgb(red, green, 0)
     }
 }
