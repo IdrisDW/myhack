@@ -1,40 +1,34 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/mainLayout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="16dp"
-    tools:context=".MainActivity">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:id="@+id/mainLayout"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Status"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="16dp"
+        tools:context=".MainActivity">
 
-    <FrameLayout
-        android:layout_width="300dp"
-        android:layout_height="600dp"
-        android:layout_gravity="center">
+        <!-- Status Text -->
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Status"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
 
-        <!-- Background Foot Image -->
-        <ImageView
-            android:id="@+id/footBackground"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="fitXY"
-            android:src="@drawable/foot_outline" />
-
-        <!-- Heat Map View Overlaid on Image -->
+        <!-- Foot Heat Map Custom View -->
         <com.example.myhack.uiApp.FootHeatMapView
-            android:id="@+id/footHeatMap"
+            android:id="@+id/heatmapView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-    </FrameLayout>
+            android:layout_height="500dp"
+            android:layout_gravity="center" />
 
-</LinearLayout>
+    </LinearLayout>
+</ScrollView>
