@@ -20,28 +20,17 @@ class FootHeatMapView @JvmOverloads constructor(
     private var pressures: List<Float> = List(18) { 0f }
     private var footBitmap: Bitmap? = null
 
-    // Adjusted and labeled sensor positions (0-1 normalized)
+    // Based on normalized x,y (0-1) relative to your foot_outline image (292x730)
     private val sensorPositions = listOf(
-        PointF(0.48f, 0.13f), // 1 - Hallux
-        PointF(0.62f, 0.20f), // 2 - Toes 2–5 [Adjusted]
-        PointF(0.28f, 0.33f), // 3 - 1st Metatarsal
-        PointF(0.48f, 0.38f), // 4 - 3rd Metatarsal
-        PointF(0.68f, 0.33f), // 5 - 5th Metatarsal
-        PointF(0.44f, 0.68f), // 6 - Midfoot
-        PointF(0.50f, 0.89f), // 7 - Heel center
-
-        // Extra sensors
-        PointF(0.22f, 0.20f), // 8 - Extra lateral toe
-        PointF(0.72f, 0.22f), // 9 - Extra medial toe [Adjusted]
-        PointF(0.2f, 0.38f),  // 10 - Extra mid lateral met
-        PointF(0.8f, 0.38f),  // 11 - Extra mid medial met
-        PointF(0.36f, 0.53f), // 12 - Extra arch left
-        PointF(0.64f, 0.53f), // 13 - Extra arch right
-        PointF(0.3f, 0.76f),  // 14 - Extra heel left
-        PointF(0.7f, 0.76f),  // 15 - Extra heel right
-        PointF(0.30f, 0.63f), // 16 - Extra outer foot [Adjusted]
-        PointF(0.75f, 0.60f), // 17 - Extra inner foot
-        PointF(0.50f, 0.58f)  // 18 - Extra center arch
+        PointF(0.25f, 0.90f),  // 1. Heel lateral
+        PointF(0.40f, 0.90f),  // 2. Heel medial
+        PointF(0.22f, 0.75f),  // 3. Midfoot lateral
+        PointF(0.45f, 0.75f),  // 4. Midfoot medial
+        PointF(0.18f, 0.55f),  // 5. 1st metatarsal head
+        PointF(0.33f, 0.50f),  // 6. 2nd metatarsal head
+        PointF(0.48f, 0.48f),  // 7. 3rd metatarsal head
+        PointF(0.63f, 0.47f),  // 9. 4th metatarsal head
+        PointF(0.70f, 0.40f)   // 13. Lateral forefoot
     )
 
     init {
@@ -54,7 +43,6 @@ class FootHeatMapView @JvmOverloads constructor(
         val viewWidth = width.toFloat()
         val viewHeight = height.toFloat()
 
-        // Draw foot outline bitmap centered
         footBitmap?.let { bitmap ->
             val imageRatio = bitmap.width.toFloat() / bitmap.height
             val viewRatio = viewWidth / viewHeight
@@ -78,17 +66,16 @@ class FootHeatMapView @JvmOverloads constructor(
             val destRect = RectF(left, top, left + drawWidth, top + drawHeight)
             canvas.drawBitmap(bitmap, null, destRect, null)
 
-            // Draw sensors
+            val horizontalOffset = 70f  // Adjust this to shift points horizontally (in pixels)
+
             for (i in sensorPositions.indices) {
                 val pos = sensorPositions[i]
-                val x = left + pos.x * drawWidth
+                val x = left + pos.x * drawWidth + horizontalOffset
                 val y = top + pos.y * drawHeight
                 val pressure = pressures.getOrElse(i) { 0f }
 
                 paint.color = getColorForPressure(pressure)
                 canvas.drawCircle(x, y, 20f, paint)
-
-                // Optional: draw sensor number for debugging
                 canvas.drawText((i + 1).toString(), x, y - 25f, textPaint)
             }
         }
