@@ -22,12 +22,12 @@
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
-        <Switch
-            android:id="@+id/modeToggle"
+        <Button
+            android:id="@+id/toggleSimButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Use Simulation Mode"
-            android:layout_marginBottom="16dp" />
+            android:text="Toggle Simulation / Bluetooth"
+            />
         <!-- Foot Heat Map Custom View -->
         <com.example.myhack.uiApp.FootHeatMapView
             android:id="@+id/heatmapView"

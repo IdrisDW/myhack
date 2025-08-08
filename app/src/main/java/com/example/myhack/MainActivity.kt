@@ -1,190 +1,217 @@
 package com.example.myhack
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothSocket
+import android.bluetooth.*
 import android.content.pm.PackageManager
-import android.os.*
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import android.widget.Switch
-import android.widget.TextView
+import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.example.myhack.uiApp.FootHeatMapView
-import java.io.*
-import java.text.SimpleDateFormat
+import java.io.IOException
+import java.io.InputStream
 import java.util.*
-import kotlin.concurrent.thread
-import kotlin.math.roundToInt
-import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
 
+    private val TAG = "MainActivity"
+
     private lateinit var footHeatMapView: FootHeatMapView
     private lateinit var statusText: TextView
-    private lateinit var modeToggle: Switch
+    private lateinit var toggleSimButton: Button
 
+    private var isSimulating = true
+
+    // Bluetooth related
+    private val bluetoothAdapter: BluetoothAdapter? by lazy {
+        BluetoothAdapter.getDefaultAdapter()
+    }
+    private var bluetoothSocket: BluetoothSocket? = null
+    private var inputStream: InputStream? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-    private var socket: BluetoothSocket? = null
-    private var isRunning = false
 
-    // Will be updated by toggle listener
-    private var useSimulation = true
+    // Use your Raspberry Pi Bluetooth device MAC address here
+    private val raspberryPiMac = "D8:3A:DD:D8:46:90"
 
-    // Simulation update runnable
-    private val updateTask = object : Runnable {
-        override fun run() {
-            val simulatedData = generateSimulatedPressureData()
-            footHeatMapView.updatePressures(simulatedData)
-            statusText.text = if (isPressureNormal(simulatedData)) "✅ Right foot normal" else "⚠️ Right foot abnormal"
-            appendDataToCsv(simulatedData)
-            handler.postDelayed(this, 1000)
+    // UUID for SPP (Serial Port Profile)
+    private val sppUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+    private val bluetoothReadBuffer = StringBuilder()
+
+    // --- Permissions you need to request ---
+    private val bluetoothPermissions = arrayOf(
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.BLUETOOTH_CONNECT
+    )
+
+    // Register the permission launcher
+    private val requestBluetoothPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.entries.all { it.value }
+        if (granted) {
+            connectToRaspberryPi()
+        } else {
+            Toast.makeText(this, "Bluetooth permissions are required", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d("MainActivity", "onCreate started")
         setContentView(R.layout.activity_main)
 
         footHeatMapView = findViewById(R.id.heatmapView)
         statusText = findViewById(R.id.statusText)
-        modeToggle = findViewById(R.id.modeToggle)
+        toggleSimButton = findViewById(R.id.toggleSimButton)
 
-        useSimulation = modeToggle.isChecked
-
-        // Start initial mode
-        if (useSimulation) {
-            startSimulation()
-            statusText.text = "🧪 Simulation mode"
-        } else {
-            startBluetooth()
-            statusText.text = "📶 Connecting Bluetooth..."
-        }
-
-        // Toggle listener
-        modeToggle.setOnCheckedChangeListener { _, isChecked ->
-            useSimulation = isChecked
-            if (useSimulation) {
-                stopBluetooth()
-                startSimulation()
-                statusText.text = "🧪 Simulation mode"
+        toggleSimButton.setOnClickListener {
+            isSimulating = !isSimulating
+            if (isSimulating) {
+                statusText.text = "Simulation mode ON"
+                handler.removeCallbacks(bluetoothConnectRunnable)
+                handler.removeCallbacks(readRunnable)
+                handler.post(simulationRunnable)
             } else {
-                stopSimulation()
-                startBluetooth()
-                statusText.text = "📶 Connecting Bluetooth..."
+                statusText.text = "Bluetooth mode ON"
+                handler.removeCallbacks(simulationRunnable)
+                checkPermissionsAndConnectBluetooth()
             }
         }
+
+        // Start in simulation mode
+        statusText.text = "Simulation mode ON"
+        handler.post(simulationRunnable)
     }
 
-    // ---------------- Simulation ----------------
-    private fun startSimulation() {
-        handler.post(updateTask)
+    private fun checkPermissionsAndConnectBluetooth() {
+        val missingPermissions = bluetoothPermissions.any {
+            ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missingPermissions) {
+            requestBluetoothPermissionsLauncher.launch(bluetoothPermissions)
+        } else {
+            connectToRaspberryPi()
+        }
     }
 
-    private fun stopSimulation() {
-        handler.removeCallbacks(updateTask)
+    // Simulation code
+    private val simulationRunnable = object : Runnable {
+        override fun run() {
+            val simulatedData = generateSimulatedPressureData()
+            footHeatMapView.updatePressures(simulatedData)
+            statusText.text = if (isPressureNormal(simulatedData)) "✅ Normal gait (Simulated)" else "⚠️ Abnormal pressure (Simulated)"
+            handler.postDelayed(this, 1000)
+        }
     }
 
     private fun generateSimulatedPressureData(): List<Float> {
-        return List(9) {
-            (Random.nextFloat() * 100).roundToInt() / 100f
-        }
-    }
-
-    // ---------------- Bluetooth ------------------
-    private fun startBluetooth() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-                100
-            )
-            return
-        }
-
-        thread {
-            val deviceName = "raspberry" // Change this to your Pi's Bluetooth name
-            val device = bluetoothAdapter?.bondedDevices?.firstOrNull {
-                it.name == deviceName
-            }
-
-            if (device == null) {
-                runOnUiThread {
-                    statusText.text = "❌ Device not paired"
-                }
-                return@thread
-            }
-
-            try {
-                val uuid = device.uuids?.firstOrNull()?.uuid
-                    ?: UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-
-                socket = device.createRfcommSocketToServiceRecord(uuid)
-                bluetoothAdapter?.cancelDiscovery()
-                socket?.connect()
-
-                runOnUiThread {
-                    statusText.text = "🔗 Connected to ${device.name}"
-                }
-
-                isRunning = true
-                val reader = BufferedReader(InputStreamReader(socket!!.inputStream))
-
-                while (isRunning) {
-                    val line = reader.readLine() ?: continue
-                    val values = line.trim().split(";").mapNotNull {
-                        it.toFloatOrNull()?.div(1023f)
-                    }
-                    if (values.size >= 9) {
-                        runOnUiThread {
-                            footHeatMapView.updatePressures(values.take(9))
-                            statusText.text = if (isPressureNormal(values)) "✅ Right foot normal" else "⚠️ Right foot abnormal"
-                        }
-                        appendDataToCsv(values.take(9))
-                    }
-                }
-
-            } catch (e: Exception) {
-                Log.e("BT", "Connection error", e)
-                runOnUiThread {
-                    statusText.text = "❌ Bluetooth error: ${e.message}"
-                }
-            }
-        }
-    }
-
-    private fun stopBluetooth() {
-        isRunning = false
-        socket?.close()
-    }
-
-    // ---------------- CSV Logging ----------------
-    private fun appendDataToCsv(data: List<Float>) {
-        try {
-            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-            val line = "$timestamp,${data.joinToString(",")}\n"
-            val file = File(filesDir, "pressure_data.csv")
-            val writer = FileWriter(file, true)
-            writer.append(line)
-            writer.flush()
-            writer.close()
-        } catch (e: IOException) {
-            Log.e("CSV", "Error writing CSV", e)
-        }
+        return List(9) { (Math.random() * 1.0).toFloat() }
     }
 
     private fun isPressureNormal(data: List<Float>): Boolean {
         return data.none { it > 0.85f || it < 0.1f }
     }
 
+    // Bluetooth connection code
+    private fun connectToRaspberryPi() {
+        val device = bluetoothAdapter?.getRemoteDevice(raspberryPiMac)
+        if (device == null) {
+            Toast.makeText(this, "Raspberry Pi device not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Thread {
+            try {
+                bluetoothSocket = device.createRfcommSocketToServiceRecord(sppUUID)
+                bluetoothAdapter?.cancelDiscovery()
+                bluetoothSocket?.connect()
+                inputStream = bluetoothSocket?.inputStream
+                handler.post {
+                    statusText.text = "Connected to Raspberry Pi"
+                }
+                handler.post(readRunnable)
+            } catch (e: IOException) {
+                Log.e(TAG, "Error connecting to Raspberry Pi", e)
+                handler.post {
+                    statusText.text = "Connection failed: ${e.message}"
+                    isSimulating = true
+                    handler.post(simulationRunnable)
+                }
+            }
+        }.start()
+    }
+
+    private val readRunnable = object : Runnable {
+        override fun run() {
+            readBluetoothData()
+            handler.postDelayed(this, 500) // check every 0.5 sec
+        }
+    }
+
+    private fun readBluetoothData() {
+        try {
+            val available = inputStream?.available() ?: 0
+            if (available > 0) {
+                val buffer = ByteArray(available)
+                inputStream?.read(buffer)
+                val received = String(buffer)
+                bluetoothReadBuffer.append(received)
+
+                // Check if we have a full data string terminated by newline
+                val fullData = bluetoothReadBuffer.toString()
+                if (fullData.contains("\n")) {
+                    val lines = fullData.split("\n")
+                    // Process all full lines except last (possibly incomplete)
+                    for (i in 0 until lines.size - 1) {
+                        processSensorDataLine(lines[i].trim())
+                    }
+                    // Keep last partial line in buffer
+                    bluetoothReadBuffer.clear()
+                    bluetoothReadBuffer.append(lines.last())
+                }
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Error reading Bluetooth data", e)
+            handler.post {
+                statusText.text = "Disconnected"
+                isSimulating = true
+                handler.post(simulationRunnable)
+            }
+        }
+    }
+
+    private fun processSensorDataLine(line: String) {
+        val parts = line.split(";")
+        if (parts.size >= 9) {
+            try {
+                val pressures = parts.take(9).map {
+                    val raw = it.toFloatOrNull() ?: 0f
+                    (raw / 1023f).coerceIn(0f, 1f)
+                }
+                runOnUiThread {
+                    footHeatMapView.updatePressures(pressures)
+                    statusText.text = if (isPressureNormal(pressures)) "✅ Normal gait" else "⚠️ Abnormal pressure"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse sensor data", e)
+            }
+        } else {
+            Log.w(TAG, "Incomplete sensor data: $line")
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        stopSimulation()
-        stopBluetooth()
+        bluetoothSocket?.close()
+        handler.removeCallbacks(readRunnable)
+        handler.removeCallbacks(simulationRunnable)
+        handler.removeCallbacks(bluetoothConnectRunnable)
+    }
+
+    private val bluetoothConnectRunnable = Runnable {
+        connectToRaspberryPi()
     }
 }
