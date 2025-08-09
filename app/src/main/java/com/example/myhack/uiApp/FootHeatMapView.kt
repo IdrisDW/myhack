@@ -3,6 +3,7 @@ package com.example.myhack.uiApp
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
+import android.util.Log
 import android.view.View
 import com.example.myhack.R
 
@@ -17,10 +18,6 @@ class FootHeatMapView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
-    private var pressures: List<Float> = List(18) { 0f }
-    private var footBitmap: Bitmap? = null
-
-    // Based on normalized x,y (0-1) relative to your foot_outline image (292x730)
     private val sensorPositions = listOf(
         PointF(0.25f, 0.90f),  // 1. Heel lateral
         PointF(0.40f, 0.90f),  // 2. Heel medial
@@ -32,6 +29,11 @@ class FootHeatMapView @JvmOverloads constructor(
         PointF(0.63f, 0.47f),  // 9. 4th metatarsal head
         PointF(0.70f, 0.40f)   // 13. Lateral forefoot
     )
+
+    // Initialize pressures list size to match sensorPositions size
+    private var pressures: List<Float> = List(sensorPositions.size) { 0f }
+
+    private var footBitmap: Bitmap? = null
 
     init {
         footBitmap = BitmapFactory.decodeResource(resources, R.drawable.foot_outline)
@@ -66,11 +68,10 @@ class FootHeatMapView @JvmOverloads constructor(
             val destRect = RectF(left, top, left + drawWidth, top + drawHeight)
             canvas.drawBitmap(bitmap, null, destRect, null)
 
-            val horizontalOffset = 70f  // Adjust this to shift points horizontally (in pixels)
-
+            // Remove horizontalOffset for testing
             for (i in sensorPositions.indices) {
                 val pos = sensorPositions[i]
-                val x = left + pos.x * drawWidth + horizontalOffset
+                val x = left + pos.x * drawWidth // + horizontalOffset removed
                 val y = top + pos.y * drawHeight
                 val pressure = pressures.getOrElse(i) { 0f }
 
@@ -89,7 +90,8 @@ class FootHeatMapView @JvmOverloads constructor(
     }
 
     fun updatePressures(newPressures: List<Float>) {
-        pressures = newPressures
+        pressures = newPressures.take(sensorPositions.size)
+        Log.d("FootHeatMapView", "Updating pressures: $pressures")
         invalidate()
     }
 }

@@ -1,19 +1,24 @@
 package com.example.myhack
 
 import android.Manifest
-import android.bluetooth.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothSocket
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.widget.*
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.example.myhack.uiApp.FootHeatMapView
 import java.io.IOException
 import java.io.InputStream
+import java.lang.reflect.Method
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
@@ -26,7 +31,6 @@ class MainActivity : AppCompatActivity() {
 
     private var isSimulating = true
 
-    // Bluetooth related
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         BluetoothAdapter.getDefaultAdapter()
     }
@@ -34,21 +38,15 @@ class MainActivity : AppCompatActivity() {
     private var inputStream: InputStream? = null
     private val handler = Handler(Looper.getMainLooper())
 
-    // Use your Raspberry Pi Bluetooth device MAC address here
     private val raspberryPiMac = "D8:3A:DD:D8:46:90"
-
-    // UUID for SPP (Serial Port Profile)
-    private val sppUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     private val bluetoothReadBuffer = StringBuilder()
 
-    // --- Permissions you need to request ---
     private val bluetoothPermissions = arrayOf(
         Manifest.permission.BLUETOOTH_SCAN,
         Manifest.permission.BLUETOOTH_CONNECT
     )
 
-    // Register the permission launcher
     private val requestBluetoothPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -98,7 +96,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Simulation code
     private val simulationRunnable = object : Runnable {
         override fun run() {
             val simulatedData = generateSimulatedPressureData()
@@ -116,7 +113,7 @@ class MainActivity : AppCompatActivity() {
         return data.none { it > 0.85f || it < 0.1f }
     }
 
-    // Bluetooth connection code
+    // Connect using reflection to RFCOMM channel 1
     private fun connectToRaspberryPi() {
         val device = bluetoothAdapter?.getRemoteDevice(raspberryPiMac)
         if (device == null) {
@@ -125,7 +122,8 @@ class MainActivity : AppCompatActivity() {
         }
         Thread {
             try {
-                bluetoothSocket = device.createRfcommSocketToServiceRecord(sppUUID)
+                bluetoothSocket?.close()
+                bluetoothSocket = createRfcommSocket(device, 1)
                 bluetoothAdapter?.cancelDiscovery()
                 bluetoothSocket?.connect()
                 inputStream = bluetoothSocket?.inputStream
@@ -144,10 +142,21 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    // Use reflection to get hidden createRfcommSocket method with channel number
+    private fun createRfcommSocket(device: BluetoothDevice, channel: Int): BluetoothSocket? {
+        return try {
+            val method: Method = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+            method.invoke(device, channel) as BluetoothSocket
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create RFCOMM socket via reflection", e)
+            null
+        }
+    }
+
     private val readRunnable = object : Runnable {
         override fun run() {
             readBluetoothData()
-            handler.postDelayed(this, 500) // check every 0.5 sec
+            handler.postDelayed(this, 500)
         }
     }
 
@@ -160,15 +169,12 @@ class MainActivity : AppCompatActivity() {
                 val received = String(buffer)
                 bluetoothReadBuffer.append(received)
 
-                // Check if we have a full data string terminated by newline
                 val fullData = bluetoothReadBuffer.toString()
                 if (fullData.contains("\n")) {
                     val lines = fullData.split("\n")
-                    // Process all full lines except last (possibly incomplete)
                     for (i in 0 until lines.size - 1) {
                         processSensorDataLine(lines[i].trim())
                     }
-                    // Keep last partial line in buffer
                     bluetoothReadBuffer.clear()
                     bluetoothReadBuffer.append(lines.last())
                 }
@@ -185,12 +191,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun processSensorDataLine(line: String) {
         val parts = line.split(";")
+        Log.d(TAG, "Received line parts count: ${parts.size} - line: $line")
         if (parts.size >= 9) {
             try {
                 val pressures = parts.take(9).map {
                     val raw = it.toFloatOrNull() ?: 0f
-                    (raw / 1023f).coerceIn(0f, 1f)
+                    raw.coerceIn(0f, 1f)
                 }
+                Log.d(TAG, "Parsed pressures: $pressures")
                 runOnUiThread {
                     footHeatMapView.updatePressures(pressures)
                     statusText.text = if (isPressureNormal(pressures)) "✅ Normal gait" else "⚠️ Abnormal pressure"
@@ -202,6 +210,8 @@ class MainActivity : AppCompatActivity() {
             Log.w(TAG, "Incomplete sensor data: $line")
         }
     }
+
+
 
     override fun onDestroy() {
         super.onDestroy()
