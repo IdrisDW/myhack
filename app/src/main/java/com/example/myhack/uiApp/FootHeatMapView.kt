@@ -3,7 +3,6 @@ package com.example.myhack.uiApp
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
-import android.util.Log
 import android.view.View
 import com.example.myhack.R
 
@@ -11,32 +10,37 @@ class FootHeatMapView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val paint = Paint()
-    private val textPaint = Paint().apply {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
-        textSize = 30f
+        textSize = 28f
         textAlign = Paint.Align.CENTER
     }
 
+    private val xOffset = 0.11f // tweak this number from 0 to ~0.15
+
     private val sensorPositions = listOf(
-        PointF(0.25f, 0.90f),  // 1. Heel lateral
-        PointF(0.40f, 0.90f),  // 2. Heel medial
-        PointF(0.22f, 0.75f),  // 3. Midfoot lateral
-        PointF(0.45f, 0.75f),  // 4. Midfoot medial
-        PointF(0.18f, 0.55f),  // 5. 1st metatarsal head
-        PointF(0.33f, 0.50f),  // 6. 2nd metatarsal head
-        PointF(0.48f, 0.48f),  // 7. 3rd metatarsal head
-        PointF(0.63f, 0.47f),  // 9. 4th metatarsal head
-        PointF(0.70f, 0.40f)   // 13. Lateral forefoot
+        PointF(0.25f + xOffset, 0.90f),
+        PointF(0.40f + xOffset, 0.90f),
+        PointF(0.22f + xOffset, 0.75f),
+        PointF(0.45f + xOffset, 0.75f),
+        PointF(0.18f + xOffset, 0.55f),
+        PointF(0.33f + xOffset, 0.50f),
+        PointF(0.48f + xOffset, 0.48f),
+        PointF(0.63f + xOffset, 0.47f),
+        PointF(0.70f + xOffset, 0.40f)
     )
 
-    // Initialize pressures list size to match sensorPositions size
+
     private var pressures: List<Float> = List(sensorPositions.size) { 0f }
 
-    private var footBitmap: Bitmap? = null
+    private val footBitmap: Bitmap = BitmapFactory.decodeResource(resources, R.drawable.foot_outline)
 
-    init {
-        footBitmap = BitmapFactory.decodeResource(resources, R.drawable.foot_outline)
+    fun updatePressures(newPressures: List<Float>) {
+        if (newPressures.size == sensorPositions.size) {
+            pressures = newPressures
+            invalidate()
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -45,53 +49,50 @@ class FootHeatMapView @JvmOverloads constructor(
         val viewWidth = width.toFloat()
         val viewHeight = height.toFloat()
 
-        footBitmap?.let { bitmap ->
-            val imageRatio = bitmap.width.toFloat() / bitmap.height
-            val viewRatio = viewWidth / viewHeight
-            val drawWidth: Float
-            val drawHeight: Float
-            val left: Float
-            val top: Float
+        // Calculate scale to fit bitmap inside view bounds (contain)
+        val bitmapRatio = footBitmap.width.toFloat() / footBitmap.height
+        val viewRatio = viewWidth / viewHeight
 
-            if (imageRatio > viewRatio) {
-                drawWidth = viewWidth
-                drawHeight = drawWidth / imageRatio
-                left = 0f
-                top = (viewHeight - drawHeight) / 2f
-            } else {
-                drawHeight = viewHeight
-                drawWidth = drawHeight * imageRatio
-                left = (viewWidth - drawWidth) / 2f
-                top = 0f
-            }
+        val drawWidth: Float
+        val drawHeight: Float
+        val left: Float
+        val top: Float
 
-            val destRect = RectF(left, top, left + drawWidth, top + drawHeight)
-            canvas.drawBitmap(bitmap, null, destRect, null)
+        if (bitmapRatio > viewRatio) {
+            // Bitmap is wider relative to view - fit width
+            drawWidth = viewWidth
+            drawHeight = drawWidth / bitmapRatio
+            left = 0f
+            top = (viewHeight - drawHeight) / 2f
+        } else {
+            // Bitmap is taller relative to view - fit height
+            drawHeight = viewHeight
+            drawWidth = drawHeight * bitmapRatio
+            top = 0f
+            left = (viewWidth - drawWidth) / 2f
+        }
 
-            // Remove horizontalOffset for testing
-            for (i in sensorPositions.indices) {
-                val pos = sensorPositions[i]
-                val x = left + pos.x * drawWidth // + horizontalOffset removed
-                val y = top + pos.y * drawHeight
-                val pressure = pressures.getOrElse(i) { 0f }
+        // Destination rectangle where bitmap is drawn
+        val destRect = RectF(left, top, left + drawWidth, top + drawHeight)
+        canvas.drawBitmap(footBitmap, null, destRect, null)
 
-                paint.color = getColorForPressure(pressure)
-                canvas.drawCircle(x, y, 20f, paint)
-                canvas.drawText((i + 1).toString(), x, y - 25f, textPaint)
-            }
+        // Draw pressure dots inside the bitmap rect
+        for ((i, pos) in sensorPositions.withIndex()) {
+            val cx = left + pos.x * drawWidth
+            val cy = top + pos.y * drawHeight
+
+            val pressure = pressures.getOrElse(i) { 0f }
+            paint.color = getPressureColor(pressure)
+
+            canvas.drawCircle(cx, cy, 25f, paint)
+            canvas.drawText((i + 1).toString(), cx, cy + 10f, textPaint)
         }
     }
 
-    private fun getColorForPressure(pressure: Float): Int {
-        val clamped = pressure.coerceIn(0f, 1f)
+    private fun getPressureColor(value: Float): Int {
+        val clamped = value.coerceIn(0f, 1f)
         val red = (clamped * 255).toInt()
         val green = ((1 - clamped) * 255).toInt()
         return Color.rgb(red, green, 0)
-    }
-
-    fun updatePressures(newPressures: List<Float>) {
-        pressures = newPressures.take(sensorPositions.size)
-        Log.d("FootHeatMapView", "Updating pressures: $pressures")
-        invalidate()
     }
 }
