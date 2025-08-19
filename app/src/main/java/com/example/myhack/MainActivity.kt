@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
@@ -57,11 +58,8 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val granted = permissions.entries.all { it.value }
-        if (granted) {
-            connectToRaspberryPi()
-        } else {
-            Toast.makeText(this, "Bluetooth permissions are required", Toast.LENGTH_SHORT).show()
-        }
+        if (granted) connectToRaspberryPi()
+        else Toast.makeText(this, "Bluetooth permissions are required", Toast.LENGTH_SHORT).show()
     }
 
     // CSV setup
@@ -82,7 +80,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dataSet: LineDataSet
     private lateinit var lineData: LineData
     private var startTime = System.currentTimeMillis()
-    private val selectedSensorIndex = 0 // sensor 1
+    private val selectedSensorIndex = 0
 
     private fun setupChart() {
         dataSet = LineDataSet(mutableListOf(), "Sensor ${selectedSensorIndex + 1} Pressure")
@@ -93,7 +91,6 @@ class MainActivity : AppCompatActivity() {
 
         lineData = LineData(dataSet)
         chart.data = lineData
-
         chart.description.isEnabled = false
         chart.setTouchEnabled(true)
         chart.isDragEnabled = true
@@ -161,26 +158,19 @@ class MainActivity : AppCompatActivity() {
 
     private val simulationRunnable = object : Runnable {
         override fun run() {
-            val simulatedData = generateSimulatedPressureData()
+            val simulatedData = List(9) { (Math.random() * 1f).toFloat() } // <- cast to Float
             updateData(simulatedData)
             handler.postDelayed(this, 5) // 200 Hz
         }
     }
 
-    private fun generateSimulatedPressureData(): List<Float> {
-        return List(9) { (Math.random() * 1.0).toFloat() }
-    }
-
-    private fun isPressureNormal(data: List<Float>): Boolean {
-        return data.none { it > 0.85f || it < 0.1f }
-    }
-
     private fun updateData(pressures: List<Float>) {
-        footHeatMapView.updatePressures(pressures)
-        appendDataToCsv(pressures)
-        appendToChart(pressures[selectedSensorIndex])
-        statusText.text =
-            if (isPressureNormal(pressures)) "✅ Normal gait" else "⚠️ Abnormal pressure"
+        handler.post {
+            footHeatMapView.updatePressures(pressures)
+            appendDataToCsv(pressures)
+            appendToChart(pressures[selectedSensorIndex])
+            statusText.text = if (pressures.none { it > 0.85f || it < 0.1f }) "✅ Normal gait" else "⚠️ Abnormal pressure"
+        }
     }
 
     private fun exportCsv() {
@@ -190,12 +180,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            val uri: Uri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.fileprovider",
-                csvFile
-            )
-
+            val uri: Uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", csvFile)
             val shareIntent = Intent().apply {
                 action = Intent.ACTION_SEND
                 type = "text/csv"
@@ -209,16 +194,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- BLUETOOTH CODE REMAINS EXACTLY AS BEFORE ---
+    // --- BLUETOOTH LOGIC UNTOUCHED ---
     private fun checkPermissionsAndConnectBluetooth() {
         val missingPermissions = bluetoothPermissions.any {
             ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missingPermissions) {
-            requestBluetoothPermissionsLauncher.launch(bluetoothPermissions)
-        } else {
-            connectToRaspberryPi()
-        }
+        if (missingPermissions) requestBluetoothPermissionsLauncher.launch(bluetoothPermissions)
+        else connectToRaspberryPi()
     }
 
     private fun connectToRaspberryPi() {
@@ -234,9 +216,7 @@ class MainActivity : AppCompatActivity() {
                 bluetoothAdapter?.cancelDiscovery()
                 bluetoothSocket?.connect()
                 inputStream = bluetoothSocket?.inputStream
-                handler.post {
-                    statusText.text = "Connected to Raspberry Pi"
-                }
+                handler.post { statusText.text = "Connected to Raspberry Pi" }
                 handler.post(readRunnable)
             } catch (e: IOException) {
                 e.printStackTrace()
@@ -279,12 +259,13 @@ class MainActivity : AppCompatActivity() {
                         bluetoothReadBuffer.append(lines.last())
                     }
                 }
-            } catch (e: IOException) {
-                e.printStackTrace()
-                handler.post {
-                    statusText.text = "Disconnected"
+            } catch (e: Exception) {
+                Log.e(TAG, "Bluetooth read error", e)
+                // fallback to simulation without crashing
+                if (!isSimulating) {
                     isSimulating = true
                     handler.post(simulationRunnable)
+                    handler.post { statusText.text = "Bluetooth disconnected, simulation ON" }
                 }
             }
             handler.postDelayed(this, 5) // 200 Hz
@@ -296,11 +277,11 @@ class MainActivity : AppCompatActivity() {
         if (parts.size >= 9) {
             try {
                 val pressures = parts.take(9).map { it.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0f }
-                handler.post { updateData(pressures) }
+                updateData(pressures)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Failed to parse line: $line", e)
             }
-        }
+        } else Log.w(TAG, "Incomplete sensor data: $line")
     }
 
     private val bluetoothConnectRunnable = Runnable { connectToRaspberryPi() }
