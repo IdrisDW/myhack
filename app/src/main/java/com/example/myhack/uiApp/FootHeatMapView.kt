@@ -17,7 +17,7 @@ class FootHeatMapView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
-    private val xOffset = 0.11f // tweak this number from 0 to ~0.15
+    private val xOffset = 0.11f
 
     private val sensorPositions = listOf(
         PointF(0.25f + xOffset, 0.90f),
@@ -31,9 +31,7 @@ class FootHeatMapView @JvmOverloads constructor(
         PointF(0.70f + xOffset, 0.40f)
     )
 
-
     private var pressures: List<Float> = List(sensorPositions.size) { 0f }
-
     private val footBitmap: Bitmap = BitmapFactory.decodeResource(resources, R.drawable.foot_outline)
 
     fun updatePressures(newPressures: List<Float>) {
@@ -49,7 +47,6 @@ class FootHeatMapView @JvmOverloads constructor(
         val viewWidth = width.toFloat()
         val viewHeight = height.toFloat()
 
-        // Calculate scale to fit bitmap inside view bounds (contain)
         val bitmapRatio = footBitmap.width.toFloat() / footBitmap.height
         val viewRatio = viewWidth / viewHeight
 
@@ -59,40 +56,42 @@ class FootHeatMapView @JvmOverloads constructor(
         val top: Float
 
         if (bitmapRatio > viewRatio) {
-            // Bitmap is wider relative to view - fit width
             drawWidth = viewWidth
             drawHeight = drawWidth / bitmapRatio
             left = 0f
             top = (viewHeight - drawHeight) / 2f
         } else {
-            // Bitmap is taller relative to view - fit height
             drawHeight = viewHeight
             drawWidth = drawHeight * bitmapRatio
             top = 0f
             left = (viewWidth - drawWidth) / 2f
         }
 
-        // Destination rectangle where bitmap is drawn
         val destRect = RectF(left, top, left + drawWidth, top + drawHeight)
         canvas.drawBitmap(footBitmap, null, destRect, null)
 
-        // Draw pressure dots inside the bitmap rect
+        // Dibujar sensores
         for ((i, pos) in sensorPositions.withIndex()) {
             val cx = left + pos.x * drawWidth
             val cy = top + pos.y * drawHeight
 
             val pressure = pressures.getOrElse(i) { 0f }
             paint.color = getPressureColor(pressure)
-
-            canvas.drawCircle(cx, cy, 25f, paint)
+            val radius = 20f + pressure * 20f // círculo más grande si presión es alta
+            canvas.drawCircle(cx, cy, radius, paint)
             canvas.drawText((i + 1).toString(), cx, cy + 10f, textPaint)
         }
     }
 
     private fun getPressureColor(value: Float): Int {
-        val clamped = value.coerceIn(0f, 1f)
-        val red = (clamped * 255).toInt()
-        val green = ((1 - clamped) * 255).toInt()
-        return Color.rgb(red, green, 0)
+        val clamped = value.coerceIn(
+            0f, 1f)
+        return when {
+            clamped > 0.85f -> Color.RED
+            clamped > 0.6f -> Color.parseColor("#FF4500") // naranja fuerte
+            clamped > 0.4f -> Color.YELLOW
+            clamped > 0.2f -> Color.GREEN
+            else -> Color.BLUE
+        }
     }
 }

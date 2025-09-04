@@ -29,6 +29,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.lang.reflect.Method
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -158,7 +159,7 @@ class MainActivity : AppCompatActivity() {
 
     private val simulationRunnable = object : Runnable {
         override fun run() {
-            val simulatedData = List(9) { (Math.random() * 1f).toFloat() } // <- cast to Float
+            val simulatedData = List(9) { (Math.random() * 1f).toFloat() }
             updateData(simulatedData)
             handler.postDelayed(this, 5) // 200 Hz
         }
@@ -194,7 +195,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- BLUETOOTH LOGIC UNTOUCHED ---
+    // --- BLUETOOTH LOGIC ---
     private fun checkPermissionsAndConnectBluetooth() {
         val missingPermissions = bluetoothPermissions.any {
             ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -212,7 +213,9 @@ class MainActivity : AppCompatActivity() {
         Thread {
             try {
                 bluetoothSocket?.close()
-                bluetoothSocket = createRfcommSocket(device, 1)
+                // Minimal change: use standard SPP UUID
+                val uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+                bluetoothSocket = device.createRfcommSocketToServiceRecord(uuid)
                 bluetoothAdapter?.cancelDiscovery()
                 bluetoothSocket?.connect()
                 inputStream = bluetoothSocket?.inputStream
@@ -229,16 +232,6 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun createRfcommSocket(device: BluetoothDevice, channel: Int): BluetoothSocket? {
-        return try {
-            val method: Method = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
-            method.invoke(device, channel) as BluetoothSocket
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
     private val readRunnable = object : Runnable {
         override fun run() {
             try {
@@ -250,10 +243,14 @@ class MainActivity : AppCompatActivity() {
                     bluetoothReadBuffer.append(received)
 
                     val fullData = bluetoothReadBuffer.toString()
+                    Log.d("BTDebug", "Raw Bluetooth data: $fullData")
+
                     if (fullData.contains("\n")) {
                         val lines = fullData.split("\n")
                         for (i in 0 until lines.size - 1) {
-                            processSensorDataLine(lines[i].trim())
+                            val line = lines[i].trim()
+                            Log.d("BTDebug", "Line received: $line")
+                            processSensorDataLine(line)
                         }
                         bluetoothReadBuffer.clear()
                         bluetoothReadBuffer.append(lines.last())
@@ -261,14 +258,13 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Bluetooth read error", e)
-                // fallback to simulation without crashing
                 if (!isSimulating) {
                     isSimulating = true
                     handler.post(simulationRunnable)
                     handler.post { statusText.text = "Bluetooth disconnected, simulation ON" }
                 }
             }
-            handler.postDelayed(this, 5) // 200 Hz
+            handler.postDelayed(this, 5)
         }
     }
 
