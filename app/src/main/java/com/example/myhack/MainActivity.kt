@@ -218,6 +218,10 @@ class MainActivity : AppCompatActivity() {
                 bluetoothSocket = device.createRfcommSocketToServiceRecord(uuid)
                 bluetoothAdapter?.cancelDiscovery()
                 bluetoothSocket?.connect()
+
+                bluetoothSocket?.outputStream?.write("hello\n".toByteArray())
+                inputStream = bluetoothSocket?.inputStream
+
                 inputStream = bluetoothSocket?.inputStream
                 handler.post { statusText.text = "Connected to Raspberry Pi" }
                 handler.post(readRunnable)
