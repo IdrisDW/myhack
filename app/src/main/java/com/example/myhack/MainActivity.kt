@@ -63,6 +63,61 @@ class MainActivity : AppCompatActivity() {
             if (!exists()) appendText("timestamp,s1,s2,s3,s4,s5,s6,s7,s8,s9\n")
         }
     }
+    private val readRunnable = object : Runnable {
+        override fun run() {
+            if (!hasLoggedReadStart) {
+                Log.d(TAG, "Read loop started")
+                hasLoggedReadStart = true
+            }
+
+            val socket = bluetoothSocket
+            val stream = inputStream
+
+            if (socket == null || !socket.isConnected || stream == null) {
+                Log.w(TAG, "Socket/stream not ready — skipping read")
+                return
+            }
+
+            try {
+                if (stream.available() > 0) {
+                    val buffer = ByteArray(1024)
+                    val bytesRead = stream.read(buffer)
+
+                    if (bytesRead > 0) {
+                        val received = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                        bluetoothReadBuffer.append(received)
+
+                        val fullData = bluetoothReadBuffer.toString()
+                        if (fullData.contains("\n")) {
+                            val lines = fullData.split("\n")
+                            for (i in 0 until lines.size - 1) {
+                                val line = lines[i].trim()
+                                Log.d("BTDebug", "Line received: $line")
+                                processSensorDataLine(line)
+                            }
+                            bluetoothReadBuffer.clear()
+                            bluetoothReadBuffer.append(lines.last())
+                        }
+                    }
+                }
+            } catch (e: IOException) {
+                Log.e(TAG, "Bluetooth read error — stream likely closed", e)
+                handler.removeCallbacks(this)
+                hasLoggedReadStart = false
+
+                if (!isSimulating) {
+                    isSimulating = true
+                    handler.post(simulationRunnable)
+                    handler.post { statusText.text = "Bluetooth disconnected, simulation ON" }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error in readRunnable", e)
+                handler.removeCallbacks(this)
+            }
+
+            handler.postDelayed(this, 5)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -223,8 +278,10 @@ class MainActivity : AppCompatActivity() {
                 bluetoothSocket?.connect()
 
                 Log.d(TAG, "Bluetooth socket connected")
-                bluetoothSocket?.outputStream?.write("hello\n".toByteArray())
-                Log.d(TAG, "Handshake sent to Raspberry Pi")
+
+                // Send start command to Pi
+                bluetoothSocket?.outputStream?.write("start\n".toByteArray())
+                Log.d(TAG, "Start command sent to Raspberry Pi")
 
                 inputStream = bluetoothSocket?.inputStream
                 reader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8))
@@ -245,62 +302,6 @@ class MainActivity : AppCompatActivity() {
             }
         }.start()
     }
-    private val readRunnable = object : Runnable {
-        override fun run() {
-            if (!hasLoggedReadStart) {
-                Log.d(TAG, "Read loop started")
-                hasLoggedReadStart = true
-            }
-
-            val socket = bluetoothSocket
-            val stream = inputStream
-
-            if (socket == null || !socket.isConnected || stream == null) {
-                Log.w(TAG, "Socket/stream not ready — skipping read")
-                return
-            }
-
-            try {
-                if (stream.available() > 0) {
-                    val buffer = ByteArray(1024)
-                    val bytesRead = stream.read(buffer)
-
-                    if (bytesRead > 0) {
-                        val received = String(buffer, 0, bytesRead, Charsets.UTF_8)
-                        bluetoothReadBuffer.append(received)
-
-                        val fullData = bluetoothReadBuffer.toString()
-                        if (fullData.contains("\n")) {
-                            val lines = fullData.split("\n")
-                            for (i in 0 until lines.size - 1) {
-                                val line = lines[i].trim()
-                                Log.d("BTDebug", "Line received: $line")
-                                processSensorDataLine(line)
-                            }
-                            bluetoothReadBuffer.clear()
-                            bluetoothReadBuffer.append(lines.last())
-                        }
-                    }
-                }
-            } catch (e: IOException) {
-                Log.e(TAG, "Bluetooth read error — stream likely closed", e)
-                handler.removeCallbacks(this)
-                hasLoggedReadStart = false
-
-                if (!isSimulating) {
-                    isSimulating = true
-                    handler.post(simulationRunnable)
-                    handler.post { statusText.text = "Bluetooth disconnected, simulation ON" }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Unexpected error in readRunnable", e)
-                handler.removeCallbacks(this)
-            }
-
-            handler.postDelayed(this, 5)
-        }
-    }
-
 
     private fun processSensorDataLine(line: String) {
         val parts = line.split(";")
